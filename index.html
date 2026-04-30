@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>萌宠小勇士 - 班级积分游戏</title>
+  <style>
+    :root {
+      --bg1: #ffeef7;
+      --bg2: #e7f7ff;
+      --card: #ffffff;
+      --text: #3c2a4d;
+      --pink: #ff7eb6;
+      --blue: #64b5f6;
+      --yellow: #ffd166;
+      --green: #77dd77;
+      --shadow: 0 8px 20px rgba(93, 68, 121, 0.15);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      color: var(--text);
+      background: linear-gradient(135deg, var(--bg1), var(--bg2));
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    h1 { margin: 0 0 10px; font-size: 2rem; }
+    .subtitle { margin: 0 0 20px; opacity: .8; }
+    .panel {
+      background: var(--card);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    input, button {
+      border: none;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    input { background: #f6f3ff; min-width: 180px; }
+    button { cursor: pointer; background: #f0e9ff; color: var(--text); }
+    button:hover { filter: brightness(.97); }
+    .btn-main { background: var(--pink); color: #fff; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .student {
+      background: #fff;
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+      border: 2px solid #ffe3f2;
+    }
+    .student-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .name { font-size: 1.1rem; font-weight: 700; }
+    .stage { background: #fff3c9; padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+    .pet { font-size: 44px; margin: 8px 0; }
+    .bar-wrap { background: #f3f0ff; border-radius: 999px; height: 14px; overflow: hidden; }
+    .bar { height: 100%; width: 0; background: linear-gradient(90deg, #8bd3ff, #ff92cb); transition: width .3s; }
+    .score { margin: 8px 0; font-weight: 700; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .learn { background: #dbedff; }
+    .moral { background: #fff6cc; }
+    .challenge { background: #ffe1e1; }
+    .deduct { background: #ececec; }
+
+    .leader li { margin: 6px 0; }
+    .tip { font-size: 12px; opacity: .75; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🐣 萌宠小勇士（卡通可爱版）</h1>
+    <p class="subtitle">课堂积分 → 宠物成长！适合小学班级投屏使用</p>
+
+    <div class="panel">
+      <div class="row">
+        <input id="studentName" placeholder="输入学生姓名" />
+        <button class="btn-main" id="addStudentBtn">➕ 添加学生</button>
+        <button id="resetBtn">🧹 清空全部数据</button>
+      </div>
+      <p class="tip">进化阈值：20分幼宠，50分成长体，90分完全体，130分闪亮形态。</p>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin-top:0">🏆 排行榜</h3>
+      <ol id="leaderboard" class="leader"></ol>
+    </div>
+
+    <div id="students" class="grid"></div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "cute_pet_class_game_v1";
+    const stages = [
+      { min: 0, name: "宠物蛋", emoji: "🥚" },
+      { min: 20, name: "幼宠", emoji: "🐥" },
+      { min: 50, name: "成长体", emoji: "🐶" },
+      { min: 90, name: "完全体", emoji: "🦊" },
+      { min: 130, name: "闪亮形态", emoji: "🦄" }
+    ];
+
+    let students = load();
+
+    function load() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+      catch { return []; }
+    }
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(students));
+    }
+
+    function stageByScore(score) {
+      let current = stages[0];
+      for (const s of stages) if (score >= s.min) current = s;
+      return current;
+    }
+
+    function nextThreshold(score) {
+      for (const s of stages) if (score < s.min) return s.min;
+      return stages[stages.length - 1].min;
+    }
+
+    function progressPercent(score) {
+      const current = stageByScore(score);
+      const idx = stages.findIndex(s => s.min === current.min);
+      if (idx === stages.length - 1) return 100;
+      const next = stages[idx + 1];
+      const range = next.min - current.min;
+      return Math.min(100, Math.max(0, ((score - current.min) / range) * 100));
+    }
+
+    function addStudent() {
+      const input = document.getElementById("studentName");
+      const name = input.value.trim();
+      if (!name) return alert("请输入学生姓名～");
+      students.push({ id: Date.now(), name, score: 0 });
+      input.value = "";
+      save();
+      render();
+    }
+
+    function updateScore(id, delta) {
+      students = students.map(s => s.id === id ? { ...s, score: Math.max(0, s.score + delta) } : s);
+      save();
+      render();
+    }
+
+    function removeStudent(id) {
+      if (!confirm("确定删除该学生记录吗？")) return;
+      students = students.filter(s => s.id !== id);
+      save();
+      render();
+    }
+
+    function resetAll() {
+      if (!confirm("确定清空全部学生与积分吗？")) return;
+      students = [];
+      save();
+      render();
+    }
+
+    function renderLeaderboard() {
+      const lb = document.getElementById("leaderboard");
+      const sorted = [...students].sort((a, b) => b.score - a.score).slice(0, 10);
+      lb.innerHTML = sorted.length ? sorted.map((s, i) => `<li>${i + 1}. ${s.name} - ${s.score}分</li>`).join("") : "<li>暂无数据</li>";
+    }
+
+    function renderStudents() {
+      const box = document.getElementById("students");
+      box.innerHTML = students.map(s => {
+        const stage = stageByScore(s.score);
+        const next = nextThreshold(s.score);
+        return `
+          <div class="student">
+            <div class="student-top">
+              <div class="name">${s.name}</div>
+              <span class="stage">${stage.name}</span>
+            </div>
+            <div class="pet">${stage.emoji}</div>
+            <div class="bar-wrap"><div class="bar" style="width:${progressPercent(s.score)}%"></div></div>
+            <div class="score">⭐ ${s.score} 分 ${s.score < 130 ? `（距下阶段 ${next - s.score} 分）` : "（已满级）"}</div>
+            <div class="actions">
+              <button class="learn" onclick="updateScore(${s.id}, 1)">📘 学习+1</button>
+              <button class="moral" onclick="updateScore(${s.id}, 1)">🤝 品德+1</button>
+              <button class="challenge" onclick="updateScore(${s.id}, 2)">🔥 挑战+2</button>
+              <button class="deduct" onclick="updateScore(${s.id}, -1)">↩ 修复-1</button>
+              <button onclick="removeStudent(${s.id})">🗑 删除</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function render() {
+      renderLeaderboard();
+      renderStudents();
+    }
+
+    document.getElementById("addStudentBtn").addEventListener("click", addStudent);
+    document.getElementById("studentName").addEventListener("keydown", e => { if (e.key === "Enter") addStudent(); });
+    document.getElementById("resetBtn").addEventListener("click", resetAll);
+
+    Object.assign(window, { updateScore, removeStudent });
+    render();
+  </script>
+</body>
+</html>
